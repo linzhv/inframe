@@ -65,12 +65,6 @@ namespace {
     const IN_TYPE_UNKNOWN = 'unknown type';
 
 
-    # storage 方案
-    const IN_STORAGE_REDIS = 'redis';
-    const IN_STORAGE_FILE = 'file';
-    const IN_STORAGE_MEMCACHED = 'memcached';
-    const IN_STORAGE_SQLITE = 'sqlite';
-
     if (!IN_IS_CLI) {
         # web模式
         error_reporting(IN_DEBUG_MODE_ON ? E_ALL : 0);
@@ -102,14 +96,99 @@ namespace {
         defined('IN_PUBLIC_URL') or define('IN_PUBLIC_URL', strlen($dir) === 1 ? IN_HOST_URL : IN_HOST_URL . (IN_IS_WIN ? str_replace('\\', '/', $dir) : $dir));//默认index
     }
 
+    if (IN_DEBUG_MODE_ON) {
+        require __DIR__ . '/inc/dvlp.php';
+
+
+    } else {
+
+        function dump(...$params)
+        {
+        }
+
+        function dumpout(...$params)
+        {
+        }
+
+        class _inframe_dvlp
+        {
+            public static function status($tag)
+            {
+            }
+
+            public static function openTrace()
+            {
+            }
+
+            public static function closeTrace()
+            {
+            }
+
+            public static function import($tag, array $status)
+            {
+            }
+
+            public static function trace($message = null)
+            {
+            }
+        }
+    }
+
 }
 # 核心类定义
 namespace inframe {
 
+    use InFrame;
+    use Exception;
 
-    class InException extends \Exception
+    /**
+     * Class Kits 工具集合
+     * @package inframe
+     */
+    final class Kits
     {
-        public function __construct($message = "")
+
+        /**
+         * 将参数二的配置合并到参数一种，如果存在参数一数组不存在的配置项，跳过其设置
+         * (不会覆盖)
+         * @param array $dest 被覆盖者
+         * @param array $sourse 覆盖者
+         * @return array
+         */
+        public static function merge(array $dest, array $sourse): array
+        {
+            foreach ($sourse as $key => $val) {
+                if (isset($dest[$key]) and is_array($val)) {
+                    $dest[$key] = self::merge($dest[$key], $val);
+                } else {
+                    if (is_int($key)) {
+                        if (!in_array($val, $dest)) $dest[] = $val;
+                    } else {
+                        $dest[$key] = $val;
+                    }
+                }
+            }
+            return $dest;
+        }
+
+        /**
+         * 过滤特殊字符串
+         * @param string $str
+         * @return string
+         */
+        public static function filter(string $str): string
+        {
+            return htmlentities(strip_tags($str), ENT_QUOTES, 'utf-8');
+        }
+    }
+
+    /**
+     * Class InException 异常
+     * @package inframe
+     */
+    class InException extends Exception
+    {
+        public function __construct($message = '')
         {
             parent::__construct($message);
         }
@@ -241,7 +320,6 @@ namespace inframe {
      */
     abstract class Component
     {
-
         /**
          * 组件配置
          * @var array
@@ -276,6 +354,10 @@ namespace inframe {
 
         protected function __construct(array $config = [])
         {
+            $_config = $this->getStaticConfig();
+            $_config = Kits::merge($_config, $this->getApplicationConfig());
+            $this->_config = $config ? Kits::merge($_config, $config) : $_config;
+
         }
 
         /**
@@ -292,7 +374,8 @@ namespace inframe {
          */
         protected function getApplicationConfig(): array
         {
-            return [];
+            $clsnm = str_replace('\\', '.', static::class);
+            return (array)InFrame::getInstance()->getConfig($clsnm, []);
         }
 
         /**
@@ -314,11 +397,32 @@ namespace inframe {
          * 魔术调用转适配器
          * @param string $name 方法名称
          * @param array $arguments 参数名称
-         * @return mixed|null 如果目标不存在适配器，则返回null
+         * @return mixed 如果目标不存在适配器，则返回null
          */
         public function __call(string $name, array $arguments)
         {
             return $this->_adapter ? call_user_func_array([$this->_adapter, $name], $arguments) : null;
+        }
+
+        /**
+         * 静态魔术调用转默认实例
+         * @param string $name 方法名称
+         * @param array $arguments 参数名称
+         * @return mixed
+         */
+        public static function __callStatic(string $name, array $arguments)
+        {
+            return call_user_func_array([self::getInstance(), $name], $arguments);
+        }
+
+        /**
+         * 设置异常信息
+         * @param string $error
+         * @return void
+         */
+        protected function setError(string $error): void
+        {
+            $this->_error = $error;
         }
 
         /**
@@ -335,6 +439,9 @@ namespace inframe {
 }
 # 核心对外接口
 namespace {
+
+    use inframe\RouteInterface;
+
     /**
      * Class InFrame
      *
@@ -343,12 +450,67 @@ namespace {
      */
     final class InFrame
     {
+        /**
+         * 应用配置
+         * @var array
+         */
+        private $_config = [
+            # 时区
+            'timezone_zone' => 'Asia/Shanghai',
+            # trace显示
+            'show_trace' => true,
 
-        private $_config = [];
+            # session 处理
+            'session_customized' => false,//是否开启session自定义
+            'session_handler' => 'redis',
+            'session_save_path' => 'tcp://127.0.0.1:6379',
+            'session_expire' => IN_ONE_HOUR,
 
-        public function __construct(array $config = [])
+            # 默认模块,控制器,方法
+            'default_modules' => '',
+            'default_controller' => 'index',
+            'default_action' => 'index',
+
+            # 是否开启CDN
+            'cdn_on' => false,
+            'cdn_path' => '',
+
+            # 管理员邮箱,可以是多个
+            'admin' => '784855684@qq.com',
+
+
+        ];
+        /**
+         * 错误回调
+         * @var callable
+         */
+        private $_errorHandler;
+        /**
+         * 异常回调
+         * @var callable
+         */
+        private $_exceptionHandler;
+        /**
+         * 脚本结束回调
+         * @var callable
+         */
+        private $_shutdownHandler;
+
+        /**
+         * 获取InFrame实例
+         * @return InFrame
+         */
+        public static function getInstance(): InFrame
         {
-            $config and $this->initialize($config);
+            static $_instance = null;
+            if (null === $_instance) {
+                $_instance = new self();
+            }
+            return $_instance;
+        }
+
+        private function __construct()
+        {
         }
 
         /**
@@ -359,6 +521,39 @@ namespace {
         public function initialize(array $config): InFrame
         {
             $this->_config = array_merge($this->_config, $config);
+
+            # 时区
+            date_default_timezone_set($this->_config['timezone_zone']) or die('timezone set failed!');
+            # 设置自动加载
+            spl_autoload_register([$this, 'loadClass'], false, true) or die('autoload register failed!');
+            # 会话
+            if ($this->_config['session_customized']) {
+                false === ini_set('session.save_handler', $this->_config['session_handler']) and die('set session.save_handler failed');
+                false === ini_set('session.save_path', $this->_config['session_save_path']) and die('set session.save_path failed');
+                false === ini_set('session.gc_maxlifetime', (string)$this->_config['session_expire']) and die('set session.gc_maxlifetime failed');
+                false === ini_set('session.cache_expire', (string)$this->_config['session_expire']) and die('set session.cache_expire failed');
+            }
+            if (!IN_IS_CLI) {
+                # web模式
+                if ($this->_config['cdn_on'] and $this->_config['cdn_path']) {
+                    define('IN_CDN', $this->_config['cdn_path']);
+                } else {
+                    # 源站
+                    define('IN_CDN', IN_PUBLIC_URL);
+                }
+                # 脚本结束回掉
+                register_shutdown_function(function () {/* 脚本结束时缓存区域的内容将会自动输出，所以不能把输出控制语句放到这里 */
+                    if (!IN_IS_AJAX and $this->_config['show_trace']) Developer::trace(null); # ajax或者明确关闭trace的情况下不输出
+                });
+                # 处理未捕获错误
+                if (false !== $this->_config['error_handler']) {
+                    set_error_handler(isset($this->_config['error_handler']) ? $this->_config['error_handler'] : [self::class, 'handleError']);
+                }
+                # 处理未捕获异常
+                if (false !== $this->_config['exception_handler']) {
+                    set_exception_handler(isset($this->_config['exception_handler']) ? $this->_config['exception_handler'] : [self::class, 'handleException']);
+                }
+            }
             return $this;
         }
 
@@ -369,7 +564,7 @@ namespace {
          */
         public function onShutdown(callable $shutdownHandler): InFrame
         {
-
+            $this->_shutdownHandler = $shutdownHandler;
             return $this;
         }
 
@@ -380,6 +575,7 @@ namespace {
          */
         public function onError(callable $errorHandler): InFrame
         {
+            $this->_errorHandler = $errorHandler;
             return $this;
         }
 
@@ -390,18 +586,121 @@ namespace {
          */
         public function onException(callable $exceptionHandler): InFrame
         {
-
+            $this->_exceptionHandler = $exceptionHandler;
             return $this;
         }
 
         /**
+         * 类映射
+         * @var array
+         */
+        private $_map = [];
+
+        /**
+         * 类的加载规则
+         *
+         * //根命名空间
+         * 'root_namespace' => [
+         *      'path'   => '',//加载路径
+         *      'ext'    => '',//类的后缀名
+         * ],
+         * 或者
+         * 'root_namespace' => '[path]',//这种情况下后缀名默认为 .php
+         *
+         * 例子:
+         * //laravel
+         * 'Illuminate' => '/lite/vendor/laravel/',
+         * //@see https://github.com/symfony/symfony
+         * 'Symfony' => '/lite/vendor/',
+         *
+         * 如果类以‘ABS:’开头，则后面的路径为绝对地址,否则为相对项目根目录(naz存放的目录)的地址
+         *
+         * 如果自动加载的类无命名空间，需要将类放到根目录下的 classes 文件夹下
+         * @var array
+         */
+        private $_rules = [
+            'Workerman' => 'inframe/plugin/',
+            'Symfony' => 'inframe/plugin/',
+        ];
+
+        /**
+         * 根据类加载
+         * @param string $clsnm
+         * @return bool 返回类是否加载成功
+         */
+        public function loadClass(string $clsnm): bool
+        {
+            if (isset($this->_map[$clsnm])) {
+                require $this->_map[$clsnm];
+                return true;
+            } else {
+                $pos = strpos($clsnm, '\\');
+
+                if ($pos === false) {
+                    # 不存在命名空间
+                    $relapath = $clsnm;
+                    $namespace = false;
+                } else {
+                    $relapath = str_replace('\\', '/', $clsnm);
+                    $namespace = substr($clsnm, 0, $pos);# 命名空间的第一级
+                }
+
+                if (false !== $namespace) {
+
+                    if (isset($this->_rules[$namespace])) {
+                        //has namespace and has rule specialized
+                        $rule = $this->_rules[$namespace];
+                        if (is_string($rule)) {
+                            $path = $rule;
+                            $ext = 'php';
+                        } else {/* array */
+                            $path = isset($rule['path']) ? $rule['path'] : '';
+                            $ext = isset($rule['ext']) ? $rule['ext'] : 'php';//兼容
+                        }
+                        if (strpos($path, '@') === 0) {
+                            # @开头的都是绝对路径
+                            $path = ltrim($path, '@');
+                        } else {
+                            $path = IN_PATH_BASE . '/' . $path;
+                        }
+                        $path = "{$path}/{$relapath}.{$ext}";
+                    } else {
+                        $path = IN_PATH_BASE . "{$relapath}.php";
+                    }
+                } else {
+                    # 直接在根路径下的寻找
+                    $path = IN_PATH_BASE . "{$relapath}.php";
+                }
+
+                if (is_file($path)) {
+                    require($this->_map[$clsnm] = $path);
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        }
+
+
+        /**
          * 开启应用
-         * @param callable $router 路由解析回调，默认使用系统自带
+         * @param RouteInterface $router 路由解析回调，默认使用系统自带
          * @return void
          */
-        public function start(callable $router = null): void
+        public function start(RouteInterface $router = null): void
         {
 
+        }
+
+        /**
+         * 获取配置
+         * @param string $name
+         * @param mixed $replacement 配置项不存在时默认返回的
+         * @return mixed|null
+         */
+        public function getConfig(string $name = '', $replacement = null)
+        {
+            return $this->_config[$name] ?? $replacement;
         }
 
 
