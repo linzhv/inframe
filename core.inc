@@ -5,7 +5,7 @@
  * Date: 06/10/2017
  * Time: 20:21
  */
-
+declare(strict_types=1);
 
 # 定义
 namespace {
@@ -107,7 +107,6 @@ namespace {
 namespace inframe {
 
 
-
     class InException extends \Exception
     {
         public function __construct($message = "")
@@ -117,30 +116,175 @@ namespace inframe {
     }
 
     /**
+     * Class RoutePacket 路由包
+     *
+     * 路由解析结果是一个路由包，也可以通过路由包创建URL
+     *
+     * @package inframe
+     */
+    final class RoutePacket
+    {
+        /**
+         * 模块名称，多级模块用'／'分隔
+         * @var string
+         */
+        private $modules;
+        /**
+         * 控制器名称
+         * @var string
+         */
+        private $controller;
+        /**
+         * 操作名称
+         * @var string
+         */
+        private $action;
+        /**
+         * 参数列表
+         * @var array
+         */
+        private $params;
+
+        /**
+         * RoutePacket constructor.
+         *
+         * 路由包的属性在实例化后是只读的
+         *
+         * @param string $modules
+         * @param string $controller
+         * @param string $action
+         * @param array $params
+         */
+        public function __construct(string $modules, string $controller, string $action, array $params = [])
+        {
+            $this->modules = $modules;
+            $this->controller = $controller;
+            $this->action = $action;
+            $this->params = $params;
+        }
+
+        /**
+         * 获取模块序列
+         * @return string
+         */
+        public function getModules(): string
+        {
+            return $this->modules;
+        }
+
+        /**
+         * 获取控制器序列
+         * @return string
+         */
+        public function getController(): string
+        {
+            return $this->controller;
+        }
+
+        /**
+         * @return string
+         */
+        public function getAction(): string
+        {
+            return $this->action;
+        }
+
+        /**
+         * @return array
+         */
+        public function getParams(): array
+        {
+            return $this->params;
+        }
+
+    }
+
+    /**
+     * Interface RouteInterface 路由接口
+     * @package inframe
+     */
+    interface RouteInterface
+    {
+        /**
+         * 解析URL
+         * @param string $url
+         * @return RoutePacket
+         */
+        public function parse(string $url): RoutePacket;
+
+        /**
+         * 创建URL
+         * @param RoutePacket $routePacket
+         * @return string
+         */
+        public function build(RoutePacket $routePacket): string;
+
+    }
+
+    /**
      * Class Component 组件类
      *
-     * 组件类的一个特征就是可以自动完成配置，它的配置有三个来源：
-     *  1.类静态配置(CSC)     : 每一个继承类可以将内置的配置写在 $config 中，因为是写死到类实现代码里的，所以可以称之为"类静态配置"
-     *  2.应用静态配置(ASC)   : 组件类可以针对每个应用设置不同的配置，这些配置统一写死到应用目录下的"config/app.php"，所以可以称为"应用静态配置"
-     *  3.动态配置(DC)       : 组件在构造时可以传递配置数组，这些配置是程序运行时产生（可能是从文件／数据库中读取，可能是计算产生）而非事先写死到代码里，
-     *                        所以可以称之为"动态配置"
+     * 组件类的一个特征就是可以自动完成配置
+     *  它的配置有三个来源：
+     *      1.类静态配置(CSC)     : 每一个继承类可以将内置的配置写在 getStaticConfig 中，因为是写死到类实现代码里的，所以可以称之为"类静态配置"
+     *      2.应用静态配置(ASC)   : 组件类可以针对每个应用设置不同的配置，这些配置统一写死到应用目录下的"config/app.php"，所以可以称为"应用静态配置"
+     *      3.动态配置(DC)       : 组件在构造时可以传递配置数组，这些配置是程序运行时产生（可能是从文件／数据库中读取，可能是计算产生）而非事先写死到代码里，
+     *                           所以可以称之为"动态配置"
+     *  各类配置都有自己的优先级，优先级越高的配置会逐条按照配置项覆盖前者，它们的优先级如它们的序号一样：
+     *      DC > ASC > CSC
      *
-     * 它们的优先级如它们的序号一样：
-     *  DC > ASC > CSC
+     * 组件的第二个特征是基于驱动的调用
+     *  组件在实例化当前实例的时候都可以指定当前配置
      *
-     * 优先级越高的配置会逐条按照配置项覆盖前者
      *
      * @package inframe
      */
     abstract class Component
     {
 
-        protected $config = [];
+        /**
+         * 组件配置
+         * @var array
+         */
+        protected $_config = [];
 
-        public function __construct(array $config = [])
+        /**
+         * 上一次调用发生的错误
+         * @var string
+         */
+        protected $_error = '';
+        /**
+         * 实例名称（作为同类不同实例之间的区别）
+         * @var int|string
+         */
+        protected $_name = '';
+        /**
+         * 适配器对象
+         * @var null|object|\PDO
+         */
+        protected $_adapter = null;
+        /**
+         * 适配器名称
+         * @var null|string
+         */
+        protected $_adapterName = null;
+        /**
+         * 适配器构造参数
+         * @var null|array
+         */
+        protected $_adapterParams = null;
+
+        protected function __construct(array $config = [])
         {
         }
 
+        /**
+         * @return array
+         */
+        protected function getStaticConfig(): array
+        {
+            return [];
+        }
 
         /**
          * 获取应用配置
@@ -149,6 +293,41 @@ namespace inframe {
         protected function getApplicationConfig(): array
         {
             return [];
+        }
+
+        /**
+         * 实例,对于构造参数的实例为同一个实例
+         * @param int $index
+         * @return Component 类实例
+         */
+        public static function getInstance(int $index = 0): Component
+        {
+            static $_instances = [];
+            if (!isset($_instances[$key = md5(($clsnm = static::class) . '#' . $index)])) {
+                $_instances[$key] = new $clsnm($index);
+            }
+            return $_instances[$key];
+        }
+
+
+        /**
+         * 魔术调用转适配器
+         * @param string $name 方法名称
+         * @param array $arguments 参数名称
+         * @return mixed|null 如果目标不存在适配器，则返回null
+         */
+        public function __call(string $name, array $arguments)
+        {
+            return $this->_adapter ? call_user_func_array([$this->_adapter, $name], $arguments) : null;
+        }
+
+        /**
+         * 获取错误信息
+         * @return string
+         */
+        public function getError(): string
+        {
+            return $this->_error;
         }
 
     }
@@ -165,9 +344,11 @@ namespace {
     final class InFrame
     {
 
+        private $_config = [];
+
         public function __construct(array $config = [])
         {
-            if ($config) $this->initialize($config);
+            $config and $this->initialize($config);
         }
 
         /**
@@ -177,7 +358,7 @@ namespace {
          */
         public function initialize(array $config): InFrame
         {
-
+            $this->_config = array_merge($this->_config, $config);
             return $this;
         }
 
