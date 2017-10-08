@@ -65,6 +65,9 @@ namespace {
     const IN_TYPE_UNKNOWN = 'unknown type';
 
 
+    const IN_ADAPTER_CLASS = 'IN_ADAPTER_CLASS';
+    const IN_ADAPTER_CONFIG = 'IN_ADAPTER_CONFIG';
+
     if (!IN_IS_CLI) {
         # web模式
         error_reporting(IN_DEBUG_MODE_ON ? E_ALL : 0);
@@ -140,6 +143,14 @@ namespace inframe {
 
     use InFrame;
     use Exception;
+    use inframe\core\Response;
+    use ReflectionMethod;
+    use inframe\throws\route\ActionNotFoundException;
+    use inframe\throws\ParametersInvalidException;
+
+    final class Developer extends \_inframe_dvlp
+    {
+    }
 
     /**
      * Class Kits 工具集合
@@ -147,6 +158,104 @@ namespace inframe {
      */
     final class Kits
     {
+
+
+        /**
+         * 获取pathinfo信息
+         *
+         * 1.http://localhost/litera/public/
+         * 'REQUEST_URI' => '/litera/public/',
+         * 'SCRIPT_NAME' => '/litera/public/index.php',
+         *
+         *
+         * @return string
+         */
+        public static function getPathInfo(): string
+        {
+            $url = null;
+
+            if (isset($_SERVER['PATH_INFO'])) {
+                //如果设置了PATH_INFO则直接获取之
+                $url = $_SERVER['PATH_INFO'];
+            } else {
+                $scriptlen = strlen($_SERVER['SCRIPT_NAME']);
+
+                # 去除参数部分
+                if (strpos($_SERVER['REQUEST_URI'], '?') !== false) {
+                    $request_url = strstr($_SERVER['REQUEST_URI'], '?', true);
+                } else {
+                    $request_url = $_SERVER['REQUEST_URI'];
+                }
+
+                if (strlen($request_url) > $scriptlen) {
+                    $pos = strpos($request_url, $_SERVER['SCRIPT_NAME']);
+                    if (false !== $pos) {
+                        //在不支持PATH_INFO...或者PATH_INFO不存在的情况下(URL省略将被认定为普通模式)
+                        //REQUEST_URI获取原生的URL地址进行解析(返回脚本名称后面的部分)
+                        if (0 === $pos) {//PATHINFO模式
+                            $url = substr($request_url, $scriptlen);
+                        } else {
+                            //重写模式
+                            $url = $request_url;
+                        }
+                    } else {
+                        $url = $request_url;
+                    }
+                } else {
+                    if (strpos($_SERVER['REQUEST_URI'], $_SERVER['REQUEST_URI']) === 0) {
+                        # 符合情况1的URL
+                    } else {
+                        # "/icode/r26" 和 '/index.php' 长度一致
+                        $url = $request_url;
+                    }
+                }
+            }
+            return isset($url) ? $url : '/';
+        }
+
+
+        /**
+         * 执行方法
+         * 注:只能通过class属性得到名称，所以猜测ReflectionMethod反射的原理是用过加载进内存中的类的二进制代码来获取参数信息的，而构造中参数以可以是实力对象，也是想依赖这个对象得到类名称
+         * @param ReflectionMethod $method 方法反射对象
+         * @param array $arguments 方法参数数组
+         * @return int 返回的int值表示缓存时间
+         * @throws Exception
+         */
+        public static function runMethod(ReflectionMethod $method, array $arguments): int
+        {
+            if (!$method->isPublic() or $method->isStatic()) {
+                throw new ActionNotFoundException($method->name);
+            }
+            $clsnm = $method->class;
+            $instance = new $clsnm();
+
+            //方法的参数检测
+            if ($method->getNumberOfParameters()) {//有参数
+                $args = [];
+                /** @var \ReflectionParameter[] $methodParams */
+                $methodParams = $method->getParameters();
+                if ($methodParams) {
+                    //参数组织
+                    foreach ($methodParams as $param) {
+                        $paramName = $param->getName();
+                        if (isset($arguments[$paramName])) {
+                            $args[] = $arguments[$paramName];
+                        } elseif ($param->isDefaultValueAvailable()) {
+                            $args[] = $param->getDefaultValue();
+                        } else {
+                            Response::cleanOutput();
+                            die("'$paramName' missing");
+                        }
+                    }
+                }
+                //执行方法
+                $result = $method->invokeArgs($instance, $args);
+            } else {//无参数的方法调用
+                $result = $method->invoke($instance);
+            }
+            return $result ?? 0;
+        }
 
         /**
          * 将参数二的配置合并到参数一种，如果存在参数一数组不存在的配置项，跳过其设置
@@ -244,36 +353,40 @@ namespace inframe {
 
         /**
          * 获取模块序列
+         * @param string $default
          * @return string
          */
-        public function getModules(): string
+        public function getModules(string $default = ''): string
         {
-            return $this->modules;
+            return $this->modules ? $this->modules : $default;
         }
 
         /**
          * 获取控制器序列
+         * @param string $default
          * @return string
          */
-        public function getController(): string
+        public function getController(string $default = ''): string
         {
-            return $this->controller;
+            return $this->controller ? $this->controller : $default;
         }
 
         /**
+         * @param string $default
          * @return string
          */
-        public function getAction(): string
+        public function getAction(string $default = ''): string
         {
-            return $this->action;
+            return strtolower($this->action ? $this->action : $default);
         }
 
         /**
+         * @param array $default
          * @return array
          */
-        public function getParams(): array
+        public function getParams(array $default = []): array
         {
-            return $this->params;
+            return $this->params ? $this->params : $default;
         }
 
     }
@@ -324,40 +437,68 @@ namespace inframe {
          * 组件配置
          * @var array
          */
-        protected $_config = [];
+        private $_config = [];
 
         /**
          * 上一次调用发生的错误
          * @var string
          */
-        protected $_error = '';
+        private $_error = '';
         /**
          * 实例名称（作为同类不同实例之间的区别）
          * @var int|string
          */
-        protected $_name = '';
+        private $_index = 0;
         /**
          * 适配器对象
          * @var null|object|\PDO
          */
-        protected $_adapter = null;
+        private $_adapter = null;
         /**
          * 适配器名称
          * @var null|string
          */
-        protected $_adapterName = null;
+        private $_adapterName = null;
         /**
          * 适配器构造参数
          * @var null|array
          */
-        protected $_adapterParams = null;
+        private $_adapterParams = null;
 
-        protected function __construct(array $config = [])
+
+        protected function __construct(array $config = [], int $index = 0)
         {
             $_config = $this->getStaticConfig();
             $_config = Kits::merge($_config, $this->getApplicationConfig());
             $this->_config = $config ? Kits::merge($_config, $config) : $_config;
+            $this->_index = $index;
 
+
+            if (!empty($this->_config[IN_ADAPTER_CLASS]) /* 说明该类使用适配器(驱动器)驱动 */ and
+                $adaptername = $this->_adapterName =
+                    isset($this->_config[IN_ADAPTER_CLASS][$name]) ?
+                        $this->_config[IN_ADAPTER_CLASS][$name] : reset($this->_config[IN_ADAPTER_CLASS])
+            ) {
+                if (!$adaptername) throw new ParametersInvalidException($name);
+                # 配置中不存在'IN_ADAPTER_CLASS'，适配器为null
+                $this->_adapterParams = isset($this->_config[IN_ADAPTER_CONFIG][$name]) ?
+                    $this->_config[IN_ADAPTER_CONFIG][$name] : reset($this->_config[IN_ADAPTER_CONFIG]);
+
+//                if (stripos(static::class, 'dao') !== false) {
+//                    dumpout($_config, $this->_config, $name, $adaptername, $this->_adapterParams);
+//                }
+
+                $this->_adapter = new $adaptername($this->_adapterParams === false ? [] : $this->_adapterParams);
+            }
+        }
+
+        /**
+         * 获取配置
+         * @return array
+         */
+        protected function getConfig(): array
+        {
+            return $this->_config;
         }
 
         /**
@@ -385,9 +526,10 @@ namespace inframe {
          */
         public static function getInstance(int $index = 0): Component
         {
+            /** @var Component[] $_instances */
             static $_instances = [];
             if (!isset($_instances[$key = md5(($clsnm = static::class) . '#' . $index)])) {
-                $_instances[$key] = new $clsnm($index);
+                $_instances[$key] = new $clsnm([], $index);
             }
             return $_instances[$key];
         }
@@ -440,7 +582,11 @@ namespace inframe {
 # 核心对外接口
 namespace {
 
+    use inframe\core\Router;
+    use inframe\Developer;
+    use inframe\Kits;
     use inframe\RouteInterface;
+    use inframe\RoutePacket;
 
     /**
      * Class InFrame
@@ -690,6 +836,26 @@ namespace {
         public function start(RouteInterface $router = null): void
         {
 
+            if (IN_IS_CLI) return;
+            Developer::status('engine_start');
+            # 解析路由
+            $router or $router = new Router();
+            /** @var RoutePacket $routePacket */
+            $routePacket = $router->parse(Kits::getPathInfo());
+
+            # 定义调度常量( 由于方法不区分大小写 => 操作的名称统一转小写 )
+            define('IN_REQUEST_MODULES', $routePacket->getModules($this->_config['default_modules']));
+            define('IN_REQUEST_CONTROLLER', $routePacket->getController($this->_config['default_controller']));
+            define('IN_REQUEST_ACTION', $routePacket->getAction($this->_config['default_action']));
+            define('IN_REQUEST_PATH', IN_REQUEST_MODULES . '/' . IN_REQUEST_CONTROLLER . '/' . IN_REQUEST_ACTION);
+
+            Developer::status('dispatch_begin');
+
+            # 执行调度
+            $method = call_user_func_array(isset($dispatch) ? $dispatch : [self::class, 'dispatch'], [IN_REQUEST_MODULES, IN_REQUEST_CONTROLLER, IN_REQUEST_ACTION]);
+            $arguments = $_REQUEST;
+
+            Kits::runMethod($method, $arguments);
         }
 
         /**

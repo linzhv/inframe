@@ -12,6 +12,7 @@ namespace inframe\core;
 
 
 use inframe\db\Dao;
+use inframe\Kits;
 
 final class Trace
 {
@@ -342,8 +343,8 @@ endline;
     {
         $html = '<div class="psArgs" id="psArgs_' . $id . '"><pre>';
         foreach ($args as $arg => $value) {
-            $html .= '<b>args [' . Security::strip((string)$arg) . "]</b>\n";
-            $html .= Security::strip(print_r($value, true));
+            $html .= '<b>args [' . Kits::filter((string)$arg) . "]</b>\n";
+            $html .= Kits::filter(print_r($value, true));
             $html .= "\n";
         }
         return $html . '</pre>';

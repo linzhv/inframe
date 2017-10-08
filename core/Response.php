@@ -194,14 +194,6 @@ final class Response
                 header('Content-Type:application/json; charset=utf-8');
                 die(json_encode($data, $options));
                 break;
-            case self::TYPE_XML :// 返回xml格式数据
-                header('Content-Type:text/xml; charset=utf-8');
-                die(XMLer::encode($data));
-                break;
-            case self::TYPE_HTML:
-                header('Content-type:text/html;charset=utf-8');
-                die($data);
-                break;
             case self::TYPE_PLAIN:
                 header('Content-type:text/plain;charset=utf-8');
                 die($data);
