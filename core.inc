@@ -73,7 +73,9 @@ namespace {
     const IN_DB_PORT = 'port';
     const IN_DB_USER = 'user';
     const IN_DB_PASSWD = 'passwd';
-    const IN_DB_DBNAME = 'dbname';
+    const IN_DB_NAME = 'dbname';
+    const IN_DB_CHARSET = 'charset';
+    const IN_DB_DSN = 'dsn';//默认先检查差DSN是否正确,直接写dsn而不设置其他的参数可以提高效率，也可以避免潜在的bug
 
     # 请求参数来源
     const IN_FROM_REQUEST = 0;
@@ -754,12 +756,6 @@ namespace {
         }
 
         /**
-         * 类映射
-         * @var array
-         */
-        private $_map = [];
-
-        /**
          * 类的加载规则
          *
          * //根命名空间
@@ -793,54 +789,49 @@ namespace {
          */
         public function loadClass(string $clsnm): bool
         {
-            if (isset($this->_map[$clsnm])) {
-                require $this->_map[$clsnm];
-                return true;
+            $pos = strpos($clsnm, '\\');
+
+            if ($pos === false) {
+                # 不存在命名空间
+                $relapath = $clsnm;
+                $namespace = false;
             } else {
-                $pos = strpos($clsnm, '\\');
+                $relapath = str_replace('\\', '/', $clsnm);
+                $namespace = substr($clsnm, 0, $pos);# 命名空间的第一级
+            }
 
-                if ($pos === false) {
-                    # 不存在命名空间
-                    $relapath = $clsnm;
-                    $namespace = false;
-                } else {
-                    $relapath = str_replace('\\', '/', $clsnm);
-                    $namespace = substr($clsnm, 0, $pos);# 命名空间的第一级
-                }
+            if (false !== $namespace) {
 
-                if (false !== $namespace) {
-
-                    if (isset($this->_rules[$namespace])) {
-                        //has namespace and has rule specialized
-                        $rule = $this->_rules[$namespace];
-                        if (is_string($rule)) {
-                            $path = $rule;
-                            $ext = 'php';
-                        } else {/* array */
-                            $path = isset($rule['path']) ? $rule['path'] : '';
-                            $ext = isset($rule['ext']) ? $rule['ext'] : 'php';//兼容
-                        }
-                        if (strpos($path, '@') === 0) {
-                            # @开头的都是绝对路径
-                            $path = ltrim($path, '@');
-                        } else {
-                            $path = IN_PATH_BASE . '/' . $path;
-                        }
-                        $path = "{$path}/{$relapath}.{$ext}";
-                    } else {
-                        $path = IN_PATH_BASE . "{$relapath}.php";
+                if (isset($this->_rules[$namespace])) {
+                    //has namespace and has rule specialized
+                    $rule = $this->_rules[$namespace];
+                    if (is_string($rule)) {
+                        $path = $rule;
+                        $ext = 'php';
+                    } else {/* array */
+                        $path = isset($rule['path']) ? $rule['path'] : '';
+                        $ext = isset($rule['ext']) ? $rule['ext'] : 'php';//兼容
                     }
+                    if (strpos($path, '@') === 0) {
+                        # @开头的都是绝对路径
+                        $path = ltrim($path, '@');
+                    } else {
+                        $path = IN_PATH_BASE . '/' . $path;
+                    }
+                    $path = "{$path}/{$relapath}.{$ext}";
                 } else {
-                    # 直接在根路径下的寻找
                     $path = IN_PATH_BASE . "{$relapath}.php";
                 }
+            } else {
+                # 直接在根路径下的寻找
+                $path = IN_PATH_BASE . "{$relapath}.php";
+            }
 
-                if (is_file($path)) {
-                    require($this->_map[$clsnm] = $path);
-                    return true;
-                } else {
-                    return false;
-                }
+            if (is_file($path)) {
+                require($path);
+                return true;
+            } else {
+                return false;
             }
         }
 

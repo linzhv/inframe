@@ -90,17 +90,13 @@ class Dao extends Component
             ],
             IN_ADAPTER_CONFIG => [
                 [
-                    IN_DAO_DBNAME => 'ischema',
-                    IN_DAO_USERNAME => 'root',
-                    IN_DAO_PASSWORD => '123456',
-                    IN_DAO_HOST => '127.0.0.1',
-                    IN_DAO_PORT => 3306,
-                    IN_DAO_CHARSET => 'UTF8',
-                    IN_DAO_DSN => null,//默认先检查差DSN是否正确,直接写dsn而不设置其他的参数可以提高效率，也可以避免潜在的bug
-                    IN_DAO_OPTIONS => [
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,//默认异常模式
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,//结果集返回形式
-                    ],
+                    IN_DB_NAME => 'ischema',
+                    IN_DB_USER => 'root',
+                    IN_DB_PASSWD => '123456',
+                    IN_DB_HOST => '127.0.0.1',
+                    IN_DB_PORT => 3306,
+                    IN_DB_CHARSET => 'UTF8',
+                    IN_DB_DSN => null,//默认先检查差DSN是否正确,直接写dsn而不设置其他的参数可以提高效率，也可以避免潜在的bug
                 ],
             ],
             ];
