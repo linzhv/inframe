@@ -7,10 +7,12 @@
  */
 declare(strict_types=1);
 
+use inframe\core\Trace;
+
 # php版本需要
 const IN_RELY_PHP_VERSION = 7.1;
 
-version_compare(PHP_VERSION, IN_RELY_PHP_VERSION, '<') and die('require php >= ' . IN_RELY_PHP_VERSION . '!');
+version_compare(PHP_VERSION, (string)IN_RELY_PHP_VERSION, '<') and die('require php >= ' . IN_RELY_PHP_VERSION . '!');
 
 
 function in_build_message($params, $traces)

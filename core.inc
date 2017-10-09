@@ -10,7 +10,7 @@ declare(strict_types=1);
 # 定义
 namespace {
 
-    const IN_VERSION = '0.8.0';
+    const IN_VERSION = '0.7.1';
     # 外部可定义应用名称,默认为空
     defined('IN_APP_NAME') or define('IN_APP_NAME', '');
     # 定义debug模式是否开启,默认开启
@@ -64,9 +64,22 @@ namespace {
     const IN_TYPE_NULL = 'NULL';
     const IN_TYPE_UNKNOWN = 'unknown type';
 
-
+    # 驱动类
     const IN_ADAPTER_CLASS = 'IN_ADAPTER_CLASS';
     const IN_ADAPTER_CONFIG = 'IN_ADAPTER_CONFIG';
+
+    # 数据库
+    const IN_DB_HOST = 'host';
+    const IN_DB_PORT = 'port';
+    const IN_DB_USER = 'user';
+    const IN_DB_PASSWD = 'passwd';
+    const IN_DB_DBNAME = 'dbname';
+
+    # 请求参数来源
+    const IN_FROM_REQUEST = 0;
+    const IN_FROM_GET = 1;
+    const IN_FROM_POST = 2;
+    const IN_FROM_INPUT = 3;
 
     if (!IN_IS_CLI) {
         # web模式
@@ -101,10 +114,7 @@ namespace {
 
     if (IN_DEBUG_MODE_ON) {
         require __DIR__ . '/inc/dvlp.php';
-
-
     } else {
-
         function dump(...$params)
         {
         }
@@ -158,15 +168,12 @@ namespace inframe {
      */
     final class Kits
     {
-
-
         /**
          * 获取pathinfo信息
          *
          * 1.http://localhost/litera/public/
          * 'REQUEST_URI' => '/litera/public/',
          * 'SCRIPT_NAME' => '/litera/public/index.php',
-         *
          *
          * @return string
          */
@@ -437,34 +444,33 @@ namespace inframe {
          * 组件配置
          * @var array
          */
-        private $_config = [];
+        protected $_config = [];
 
         /**
          * 上一次调用发生的错误
          * @var string
          */
-        private $_error = '';
+        protected $_error = '';
         /**
          * 实例名称（作为同类不同实例之间的区别）
          * @var int|string
          */
-        private $_index = 0;
+        protected $_index = 0;
         /**
          * 适配器对象
          * @var null|object|\PDO
          */
-        private $_adapter = null;
+        protected $_adapter = null;
         /**
          * 适配器名称
          * @var null|string
          */
-        private $_adapterName = null;
+        protected $_adapterName = null;
         /**
          * 适配器构造参数
          * @var null|array
          */
-        private $_adapterParams = null;
-
+        protected $_adapterParams = null;
 
         protected function __construct(array $config = [], int $index = 0)
         {
@@ -476,18 +482,17 @@ namespace inframe {
 
             if (!empty($this->_config[IN_ADAPTER_CLASS]) /* 说明该类使用适配器(驱动器)驱动 */ and
                 $adaptername = $this->_adapterName =
-                    isset($this->_config[IN_ADAPTER_CLASS][$name]) ?
-                        $this->_config[IN_ADAPTER_CLASS][$name] : reset($this->_config[IN_ADAPTER_CLASS])
+                    isset($this->_config[IN_ADAPTER_CLASS][$index]) ?
+                        $this->_config[IN_ADAPTER_CLASS][$index] : reset($this->_config[IN_ADAPTER_CLASS])
             ) {
-                if (!$adaptername) throw new ParametersInvalidException($name);
+                if (!$adaptername) throw new ParametersInvalidException($index);
                 # 配置中不存在'IN_ADAPTER_CLASS'，适配器为null
-                $this->_adapterParams = isset($this->_config[IN_ADAPTER_CONFIG][$name]) ?
-                    $this->_config[IN_ADAPTER_CONFIG][$name] : reset($this->_config[IN_ADAPTER_CONFIG]);
-
+                $this->_adapterParams = isset($this->_config[IN_ADAPTER_CONFIG][$index]) ?
+                    $this->_config[IN_ADAPTER_CONFIG][$index] : reset($this->_config[IN_ADAPTER_CONFIG]);
+                # debug代码
 //                if (stripos(static::class, 'dao') !== false) {
 //                    dumpout($_config, $this->_config, $name, $adaptername, $this->_adapterParams);
 //                }
-
                 $this->_adapter = new $adaptername($this->_adapterParams === false ? [] : $this->_adapterParams);
             }
         }
@@ -522,14 +527,15 @@ namespace inframe {
         /**
          * 实例,对于构造参数的实例为同一个实例
          * @param int $index
+         * @param array $config
          * @return Component 类实例
          */
-        public static function getInstance(int $index = 0): Component
+        public static function getInstance(int $index = 0, array $config = []): Component
         {
             /** @var Component[] $_instances */
             static $_instances = [];
             if (!isset($_instances[$key = md5(($clsnm = static::class) . '#' . $index)])) {
-                $_instances[$key] = new $clsnm([], $index);
+                $_instances[$key] = new $clsnm($config, $index);
             }
             return $_instances[$key];
         }
@@ -582,11 +588,15 @@ namespace inframe {
 # 核心对外接口
 namespace {
 
+    use inframe\core\Handler;
     use inframe\core\Router;
     use inframe\Developer;
     use inframe\Kits;
     use inframe\RouteInterface;
     use inframe\RoutePacket;
+    use inframe\throws\route\ActionNotFoundException;
+    use inframe\throws\route\ModulesNotFoundException;
+    use inframe\throws\route\ControllerNotFoundException;
 
     /**
      * Class InFrame
@@ -624,6 +634,9 @@ namespace {
             # 管理员邮箱,可以是多个
             'admin' => '784855684@qq.com',
 
+            # 异常和错误处理 设置为null时表示使用系统默认，设置为false时表示不进行设置
+            'error_handler' => null,
+            'exception_handler' => null,
 
         ];
         /**
@@ -693,11 +706,15 @@ namespace {
                 });
                 # 处理未捕获错误
                 if (false !== $this->_config['error_handler']) {
-                    set_error_handler(isset($this->_config['error_handler']) ? $this->_config['error_handler'] : [self::class, 'handleError']);
+                    set_error_handler($this->_config['error_handler'] ?? function (int $code, string $message, string $file, int $line) {
+                            Handler::handleThrowable($message, "Error {$code}", $file, $line, debug_backtrace());
+                        });
                 }
                 # 处理未捕获异常
                 if (false !== $this->_config['exception_handler']) {
-                    set_exception_handler(isset($this->_config['exception_handler']) ? $this->_config['exception_handler'] : [self::class, 'handleException']);
+                    set_exception_handler($this->_config['exception_handler'] ?? function (Throwable $e) {
+                            Handler::handleThrowable($e->getMessage(), get_class($e), $e->getFile(), (int)$e->getLine(), $e->getTrace());
+                        });
                 }
             }
             return $this;
@@ -827,11 +844,13 @@ namespace {
             }
         }
 
-
         /**
          * 开启应用
          * @param RouteInterface $router 路由解析回调，默认使用系统自带
          * @return void
+         * @throws ActionNotFoundException
+         * @throws ControllerNotFoundException
+         * @throws ModulesNotFoundException
          */
         public function start(RouteInterface $router = null): void
         {
@@ -839,7 +858,7 @@ namespace {
             if (IN_IS_CLI) return;
             Developer::status('engine_start');
             # 解析路由
-            $router or $router = new Router();
+            $router or $router = Router::getInstance();
             /** @var RoutePacket $routePacket */
             $routePacket = $router->parse(Kits::getPathInfo());
 
@@ -852,10 +871,20 @@ namespace {
             Developer::status('dispatch_begin');
 
             # 执行调度
-            $method = call_user_func_array(isset($dispatch) ? $dispatch : [self::class, 'dispatch'], [IN_REQUEST_MODULES, IN_REQUEST_CONTROLLER, IN_REQUEST_ACTION]);
-            $arguments = $_REQUEST;
+            $modulepath = IN_PATH_APP . 'app/' . IN_REQUEST_MODULES;//linux 不识别
+            if (!is_dir($modulepath)) throw new ModulesNotFoundException($modulepath);
+            if (!class_exists($className = IN_APP_NAME . (IN_REQUEST_MODULES ? '\\app\\' . IN_REQUEST_MODULES : '\\app') . '\\controller\\' . IN_REQUEST_ACTION, true)) throw new ControllerNotFoundException($className);
+            try {
+                $method = new ReflectionMethod($className, IN_REQUEST_ACTION);
+            } catch (ReflectionException $e) {
+                try {
+                    $method = new ReflectionMethod($className, '_empty');
+                } catch (ReflectionException $e) {
+                    throw new ActionNotFoundException(IN_REQUEST_ACTION);
+                }
+            }
 
-            Kits::runMethod($method, $arguments);
+            Kits::runMethod($method, $_REQUEST);
         }
 
         /**
@@ -868,7 +897,6 @@ namespace {
         {
             return $this->_config[$name] ?? $replacement;
         }
-
 
     }
 

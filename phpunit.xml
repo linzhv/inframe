@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit stopOnFailure="true" bootstrap="core.inc">
+    <testsuites>
+        <!-- 测试套件:全部 -->
+        <testsuite>
+            <directory suffix="Test.php">test</directory>
+        </testsuite>
+    </testsuites>
+    <!-- 测试例外 -->
+    <filter>
+        <whitelist>
+            <directory>test</directory>
+            <exclude>
+                <!-- 过滤语言测试 -->
+                <directory>test/php</directory>
+            </exclude>
+        </whitelist>
+    </filter>
+</phpunit>

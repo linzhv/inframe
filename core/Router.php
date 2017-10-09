@@ -6,6 +6,7 @@
  * Time: 09:57
  */
 
+declare(strict_types=1);
 namespace inframe\core;
 
 use inframe\Component;

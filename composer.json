@@ -1,4 +1,17 @@
 {
+    "name": "linzhv/inframe",
+    "description": "PHP inframe",
+    "keywords": [
+        "php7",
+        "inframe"
+    ],
+    "authors": [
+        {
+            "name": "linzhv",
+            "email": "784855684@qq.com"
+        }
+    ],
+    "license": "MIT",
     "require-dev": {
         "phpunit/phpunit": "^6.2"
     }
