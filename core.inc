@@ -570,7 +570,7 @@ namespace inframe {
          * @param string $error
          * @return void
          */
-        protected function setError(string $error): void
+        protected function setError(string $error)
         {
             $this->_error = $error;
         }
@@ -843,7 +843,7 @@ namespace {
          * @throws ControllerNotFoundException
          * @throws ModulesNotFoundException
          */
-        public function start(RouteInterface $router = null): void
+        public function start(RouteInterface $router = null)
         {
 
             if (IN_IS_CLI) return;

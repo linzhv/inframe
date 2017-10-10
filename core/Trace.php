@@ -216,7 +216,7 @@ endline;
      * @param array $traces 错误回溯
      * @return void
      */
-    public static function handleTrowable(string $message, string $classnm, string $file, int $line, array $traces): void
+    public static function handleTrowable(string $message, string $classnm, string $file, int $line, array $traces)
     {
         Response::cleanOutput();
         $infos = [
@@ -228,7 +228,7 @@ endline;
         ];
 
         # 记录错误日志
-        Logger::getLogger('throwable')->fatal($infos);
+        Log::getLogger('throwable')->fatal($infos);
 
         if (IN_IS_CLI) {
             var_dump($infos);

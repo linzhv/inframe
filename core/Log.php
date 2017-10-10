@@ -50,7 +50,7 @@ final class Log extends Component
     }
 
 
-    public static function save(): void
+    public static function save()
     {
         $date = date('Ymd');
 

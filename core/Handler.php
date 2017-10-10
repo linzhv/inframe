@@ -19,7 +19,7 @@ use inframe\Kits;
 class Handler
 {
 
-    public static function handleThrowable(string $message, string $classnm, string $file, int $line, array $traces): void
+    public static function handleThrowable(string $message, string $classnm, string $file, int $line, array $traces)
     {
         Response::cleanOutput();
         $infos = [
@@ -168,7 +168,7 @@ class Handler
      * 脚本终止时
      * @return void
      */
-    public static function handleShutdown(): void
+    public static function handleShutdown()
     {
     }
 
