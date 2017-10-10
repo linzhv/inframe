@@ -10,6 +10,7 @@ declare(strict_types=1);
 
 namespace inframe\database;
 
+use inframe\database\adapter\MySQL;
 use PDO;
 use PDOStatement;
 use PDOException;
@@ -34,6 +35,8 @@ use inframe\throws\database\ExecuteException;
  * @method bool inTransaction()  check if is in a transaction
  * @method bool backup($table, bool $withdata = true)
  * @method int lastInsertId($name = null) get auto-inc id of last insert record
+ *
+ * @method Dao getInstance(int $index=0,array $config=[]) static
  *
  * @package inframe\database
  */
@@ -86,7 +89,7 @@ class Dao extends Component
     {
         return [
             IN_ADAPTER_CLASS => [
-                'wshore\\core\\database\\MySQL',
+                MySQL::class,
             ],
             IN_ADAPTER_CONFIG => [
                 [
@@ -99,7 +102,7 @@ class Dao extends Component
                     IN_DB_DSN => null,//默认先检查差DSN是否正确,直接写dsn而不设置其他的参数可以提高效率，也可以避免潜在的bug
                 ],
             ],
-            ];
+        ];
     }
 
     /********************************* 基本的查询功能(发生了错误可以查询返回值是否是false,getError可以获取错误的详细信息(每次调用这些功能前都会清空之前的错误)) ***************************************************************************************/
