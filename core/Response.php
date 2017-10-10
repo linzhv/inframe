@@ -13,7 +13,10 @@ namespace inframe\core;
 use inframe\helper\XMLer;
 use inframe\throws\ParametersInvalidException;
 
-
+/**
+ * Class Response 响应类
+ * @package inframe\core
+ */
 final class Response
 {
     const TYPE_JSONP = 4;

@@ -13,6 +13,10 @@ namespace inframe\throws\database;
 
 use inframe\throws\DatabaseException;
 
+/**
+ * Class ConnectException 数据库连接异常(包括关系型数据库和KV型数据库)
+ * @package inframe\throws\database
+ */
 class ConnectException extends DatabaseException
 {
 

@@ -532,7 +532,7 @@ namespace inframe {
          * @param array $config
          * @return Component 类实例
          */
-        public static function getInstance(int $index = 0, array $config = []): Component
+        public static function getInstance(int $index = 0, array $config = [])
         {
             /** @var Component[] $_instances */
             static $_instances = [];
