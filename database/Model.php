@@ -202,6 +202,7 @@ abstract class Model
             } else {
                 $this->{$this->pk} = null;
                 unset($this->data[$this->pk]);
+                if (!$this->data) throw new DatabaseException('insert data empty!');
                 $this->insert($this->data);
                 $this->id = $this->lastInsertId();
             }
@@ -271,12 +272,6 @@ abstract class Model
             }
         }
 
-        if ($pk) {
-            if (!($data = $this->find($pk))) throw new RecordNotFoundException("ID '{$pk}' not found ");
-            $this->data = $data;
-            $this->id = $this->data[$this->pk];
-        }
-
         $tablename = $this->tableName();
         if (false !== strpos($tablename, '{{')) {
             $this->_replaceTablePrefix($tablename);
@@ -286,6 +281,14 @@ abstract class Model
         $this->reset([
             'table' => $tablename,
         ]);
+
+
+        if ($pk) {
+            if (!($data = $this->find($pk))) throw new RecordNotFoundException("ID '{$pk}' not found ");
+            $this->data = $data;
+            $this->id = $this->data[$this->pk];
+        }
+
     }
 
     /**

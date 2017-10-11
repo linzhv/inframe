@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace inframe\throws\database;
 
 
+use inframe\core\Log;
 use inframe\throws\DatabaseException;
 
 /**
@@ -19,5 +20,11 @@ use inframe\throws\DatabaseException;
  */
 class ConnectException extends DatabaseException
 {
+
+    public function __construct($message = '')
+    {
+        parent::__construct($message);
+        Log::getLogger('db_connect')->fatal($message);
+    }
 
 }
