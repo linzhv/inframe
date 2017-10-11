@@ -177,7 +177,7 @@ abstract class Model
 
     public function __get($name)
     {
-        return isset($this->data[$name]) ? $this->data[$name] : null;
+        return $this->data[$name] ?? null;
     }
 
     public function __set($name, $value)
@@ -190,7 +190,7 @@ abstract class Model
      * 当主键id被指定了之后（构造时指定了参数ID），save操作将会执行数据的修改操作；否则将添加数据
      * 如果需要验证信息，可以在调用parent::save()之前验证数据是否合法
      * @param bool $justInsert 是否是插入操作，为true时只进行插入操作
-     * @return bool 返回是否成功
+     * @return void 返回是否成功
      * @throws DatabaseException
      */
     public function save($justInsert = false)
@@ -206,7 +206,6 @@ abstract class Model
                 $this->id = $this->lastInsertId();
             }
             $this->reload();
-            return true;
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage());
         }
